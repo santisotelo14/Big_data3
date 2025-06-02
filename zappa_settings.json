@@ -1,5 +1,5 @@
 {
-    "dev": {
+    "entorno1": {
         "app_function": "app.lambda_handler",
         "aws_region": "us-east-1",
         "apigateway_enabled": false,

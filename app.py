@@ -2,29 +2,40 @@ import boto3
 import requests
 from datetime import datetime
 
+# Cliente de S3
 s3 = boto3.client('s3')
-BUCKET_NAME = 'publimetro333'  # Asegúrate de que este bucket exista
+BUCKET_NAME = 'publimetro333'  # Nombre del bucket
 
-# Lista de URLs a descargar
+# URLs de los periódicos
 URLS = [
     'https://www.eltiempo.com/',
-    'https://www.publimetro.co/'
+    'https://www.publimetro.co/'  #URL de las páginas
 ]
 
-def download_and_save(url):
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            fecha = datetime.utcnow().strftime('%Y-%m-%d')
-            domain = url.split("//")[1].split("/")[0].replace("www.", "")
-            filename = f"{fecha}-{domain}.html"
-            s3.put_object(Bucket=BUCKET_NAME, Key=filename, Body=response.text)
-            return f"Guardado: {filename}"
-        else:
-            return f"Error {response.status_code} al descargar {url}"
-    except Exception as e:
-        return f"Error al descargar {url}: {str(e)}"
+def download_and_save_all():
+    fecha = datetime.utcnow().strftime('%Y-%m-%d')
+    contenido_completo = ""
+
+    for url in URLS:
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                contenido_completo += f"\n<!-- INICIO DE {url} -->\n"
+                contenido_completo += response.text
+                contenido_completo += f"\n<!-- FIN DE {url} -->\n"
+            else:
+                contenido_completo += f"\n<!-- ERROR {response.status_code} al descargar {url} -->\n"
+        except Exception as e:
+            contenido_completo += f"\n<!-- ERROR al descargar {url}: {str(e)} -->\n"
+
+    # Ruta destino en S3
+    s3_key = f"headlines/raw/contenido-{fecha}.html"
+
+    # Subir a S3
+    s3.put_object(Bucket=BUCKET_NAME, Key=s3_key, Body=contenido_completo)
+
+    return f"Archivo guardado como: s3://{BUCKET_NAME}/{s3_key}"
 
 def lambda_handler(event, context):
-    resultados = [download_and_save(url) for url in URLS]
-    return {'resultado': resultados}
+    resultado = download_and_save_all()
+    return {'resultado': resultado}
