@@ -1,14 +1,10 @@
 {
-    "dev": {
-        "app_function": "app.lambda_handler",
+    "procesador": {
+        "app_function": "app2.lambda_handler",
         "aws_region": "us-east-1",
         "apigateway_enabled": false,
         "manage_roles": false,
         "role_name": "LabRole",
-        "profile_name": "default",
-        "project_name": "environment",
-        "runtime": "python3.9",
-        "s3_bucket": "zappa-el0abhvwt",
         "exclude": [
             "boto3",
             "dateutil",
@@ -16,10 +12,33 @@
             "s3transfer",
             "concurrent"
         ],
+        "profile_name": "default",
+        "project_name": "big-data3",
+        "runtime": "python3.9",
+        "s3_bucket": "zappa-v6jngx5z5",
         "events": [
             {
-                "function": "app.lambda_handler",
-                "expression": "rate(1 day)"
+                "function": "app2.lambda_handler",
+                "event_source": {
+                    "arn": "arn:aws:s3:::publimetro333",
+                    "events": [
+                        "s3:ObjectCreated:*"
+                    ],
+                    "filters": {
+                        "Key": {
+                            "FilterRules": [
+                                {
+                                    "Name": "prefix",
+                                    "Value": "headlines/raw/"
+                                },
+                                {
+                                    "Name": "suffix",
+                                    "Value": ".html"
+                                }
+                            ]
+                        }
+                    }
+                }
             }
         ]
     }
