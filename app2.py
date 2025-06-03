@@ -1,73 +1,81 @@
 import boto3
-import os
-from datetime import datetime
+import pandas as pd
 from bs4 import BeautifulSoup
-from io import StringIO
-import csv
+from datetime import datetime
+import re
 
-s3 = boto3.client('s3')
-BUCKET_NAME = 'publimetro333'
+s3 = boto3.client("s3")
+BUCKET_NAME = "publimetro333"
 
-def listar_archivos_raw():
-    respuesta = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix='headlines/raw/')
-    return [obj['Key'] for obj in respuesta.get('Contents', []) if obj['Key'].endswith('.html')]
-
-def procesar_html(html, fuente):
-    soup = BeautifulSoup(html, 'html.parser')
+def extraer_eltiempo(html):
+    soup = BeautifulSoup(html, "html.parser")
     noticias = []
 
-    # Puedes personalizar los selectores según cada sitio
-    if 'eltiempo.com' in fuente:
-        bloques = soup.select('article a')
-    elif 'publimetro' in fuente:
-        bloques = soup.select('div.article-details a')
-    else:
-        bloques = soup.find_all('a')
+    for item in soup.select("article"):
+        categoria = item.get("data-seccion", "general")
+        titular = item.select_one("h1, h2, h3")
+        enlace = item.select_one("a[href]")
 
-    for a in bloques:
-        enlace = a.get('href')
-        texto = a.get_text(strip=True)
-        if texto and enlace and len(texto) > 20:
-            categoria = enlace.split('/')[1] if '/' in enlace else 'general'
-            if not enlace.startswith('http'):
-                enlace = f'https://{fuente}/{enlace.lstrip("/")}'
-            noticias.append([categoria, texto, enlace])
-    
+        if titular and enlace:
+            noticias.append({
+                "categoria": categoria.strip(),
+                "titular": titular.get_text(strip=True),
+                "enlace": enlace["href"] if enlace["href"].startswith("http") else "https://www.eltiempo.com" + enlace["href"]
+            })
     return noticias
 
-def guardar_csv_en_s3(noticias, periodico, fecha):
-    year = fecha[:4]
-    month = fecha[5:7]
-    day = fecha[8:10]
+def extraer_publimetro(html):
+    soup = BeautifulSoup(html, "html.parser")
+    noticias = []
 
-    csv_buffer = StringIO()
-    writer = csv.writer(csv_buffer)
-    writer.writerow(["categoria", "titular", "enlace"])
-    writer.writerows(noticias)
+    for item in soup.select("article"):
+        categoria = item.find("span", class_="category")
+        titular = item.find(["h1", "h2", "h3"])
+        enlace = item.find("a", href=True)
 
-    key_csv = f"headlines/final/periodico={periodico}/year={year}/month={month}/day={day}/noticias.csv"
-    s3.put_object(Bucket=BUCKET_NAME, Key=key_csv, Body=csv_buffer.getvalue())
-    print(f"Guardado en: s3://{BUCKET_NAME}/{key_csv}")
+        if titular and enlace:
+            noticias.append({
+                "categoria": categoria.get_text(strip=True) if categoria else "general",
+                "titular": titular.get_text(strip=True),
+                "enlace": enlace["href"] if enlace["href"].startswith("http") else "https://www.publimetro.co" + enlace["href"]
+            })
+    return noticias
 
-def lambda_handler(event, context):
-    archivos = listar_archivos_raw()
+def procesar_archivos_existentes():
+    respuesta = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix="headlines/raw/")
+    archivos = [obj["Key"] for obj in respuesta.get("Contents", []) if obj["Key"].endswith(".html")]
 
-    for key in archivos:
-        print(f"Procesando: {key}")
-        obj = s3.get_object(Bucket=BUCKET_NAME, Key=key)
-        contenido = obj['Body'].read().decode('utf-8')
-        fecha_str = key.split("contenido-")[-1].replace(".html", "")
-        fecha = datetime.strptime(fecha_str, "%Y-%m-%d")
+    for archivo in archivos:
+        print(f"Procesando: {archivo}")
+        obj = s3.get_object(Bucket=BUCKET_NAME, Key=archivo)
+        contenido = obj["Body"].read().decode("utf-8")
 
-        if "eltiempo" in contenido:
-            noticias = procesar_html(contenido, 'www.eltiempo.com')
-            guardar_csv_en_s3(noticias, "eltiempo", fecha_str)
-        if "publimetro" in contenido:
-            noticias = procesar_html(contenido, 'www.publimetro.co')
-            guardar_csv_en_s3(noticias, "publimetro", fecha_str)
+        fecha_match = re.search(r"contenido-(\d{4})-(\d{2})-(\d{2})\.html", archivo)
+        if not fecha_match:
+            continue
+        year, month, day = fecha_match.groups()
+
+        for nombre, extractor in [("eltiempo", extraer_eltiempo), ("publimetro", extraer_publimetro)]:
+            noticias = extractor(contenido)
+            if not noticias:
+                continue
+
+            df = pd.DataFrame(noticias)
+            df["periodico"] = nombre
+            df["year"] = int(year)
+            df["month"] = int(month)
+            df["day"] = int(day)
+
+            # Ruta limpia
+            output_key = f"headlines/final/periodico={nombre}/year={year}/month={month}/day={day}/noticias.csv"
+            csv_data = df.to_csv(index=False)
+            s3.put_object(Bucket=BUCKET_NAME, Key=output_key, Body=csv_data.encode("utf-8"))
+
+            print(f"Guardado en: s3://{BUCKET_NAME}/{output_key}")
 
     return {"message": "Procesamiento finalizado"}
-    
-if __name__ == '__main__':
-    resultado = lambda_handler({}, {})
+
+# Solo para ejecución directa (por ejemplo: python app2.py)
+if __name__ == "__main__":
+    resultado = procesar_archivos_existentes()
     print(resultado)
