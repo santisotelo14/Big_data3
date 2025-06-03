@@ -148,6 +148,20 @@ def process_html_file(html_content, file_key):
     
     return news_items, date_str
 
+def combine_existing_csv(existing_content, new_items):
+    """Combina los datos existentes del CSV con los nuevos elementos"""
+    reader = csv.DictReader(io.StringIO(existing_content))
+    existing_items = list(reader)
+    
+    # Combinar elementos, evitando duplicados basados en el enlace
+    seen_links = {item['enlace'] for item in existing_items}
+    for item in new_items:
+        if item['enlace'] not in seen_links:
+            existing_items.append(item)
+            seen_links.add(item['enlace'])
+    
+    return existing_items
+
 def lambda_handler(event, context):
     """Manejador del Lambda que se activa con eventos de S3"""
     try:
@@ -169,24 +183,32 @@ def lambda_handler(event, context):
                 print(f"No se encontraron noticias en {key}")
                 return {'status': 'No se encontraron noticias'}
             
+            # Verificar si ya existe un CSV para esa fecha
+            csv_key = f"headlines/processed/noticias-{date_str}.csv"
+            try:
+                existing_csv = s3_client.get_object(Bucket=BUCKET_NAME, Key=csv_key)
+                existing_content = existing_csv['Body'].read().decode('utf-8')
+                combined_items = combine_existing_csv(existing_content, news_items)
+            except s3_client.exceptions.NoSuchKey:
+                combined_items = news_items
+            
             # Crear CSV en memoria
             output = io.StringIO()
             writer = csv.DictWriter(output, fieldnames=['periodico', 'categoria', 'titular', 'enlace', 'fecha_extraccion'])
             writer.writeheader()
-            for item in news_items:
+            for item in combined_items:
                 writer.writerow(item)
             
             # Guardar CSV en S3
-            csv_key = f"headlines/processed/noticias-{date_str}.csv"
             s3_client.put_object(Bucket=BUCKET_NAME, Key=csv_key, Body=output.getvalue())
             
             print(f"CSV guardado en s3://{BUCKET_NAME}/{csv_key}")
-            print(f"Extraídas {len(news_items)} noticias")
+            print(f"Total de noticias en el CSV: {len(combined_items)}")
             
             # Estadísticas
             by_newspaper = {}
             by_category = {}
-            for item in news_items:
+            for item in combined_items:
                 newspaper = item['periodico']
                 category = item['categoria']
                 by_newspaper[newspaper] = by_newspaper.get(newspaper, 0) + 1
