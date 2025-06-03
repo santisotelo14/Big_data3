@@ -1,17 +1,13 @@
 {
-    "crawler": {
-        "app_function": "app3.lambda_handler",
-        "aws_region": "us-east-1",
-        "exclude": [
-            "boto3",
-            "dateutil",
-            "botocore",
-            "s3transfer",
-            "concurrent"
-        ],
-        "profile_name": "default",
-        "project_name": "big-data3",
-        "runtime": "python3.9",
-        "s3_bucket": "zappa-uwlit31kl"
-    }
+  "crawler": {
+    "app_function": "app3.lambda_handler",
+    "aws_region": "us-east-1",
+    "profile_name": "default",
+    "project_name": "Big_data3",
+    "runtime": "python3.9",
+    "s3_bucket": "zappa-el0abhvwt",
+    "manage_roles": false,
+    "role_name": "LabRole",
+    "apigateway_enabled": false
+  }
 }
