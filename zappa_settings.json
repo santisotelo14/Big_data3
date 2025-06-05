@@ -13,6 +13,12 @@
       "boto3",
       "botocore",
       "s3transfer"
+    ],
+    "events": [
+      {
+        "function": "app2.lambda_handler",
+        "expression": "rate(1 day)"
+      }
     ]
   }
 }

@@ -67,7 +67,7 @@ def procesar_archivos_existentes():
             df["day"] = int(day)
 
             # Ruta limpia
-            output_key = f"headlines/final/periodico={nombre}/year={year}/month={month}/day={day}/noticias.csv"
+            output_key = f"headlines/finalp/noticias{day}.csv"
             csv_data = df.to_csv(index=False)
             s3.put_object(Bucket=BUCKET_NAME, Key=output_key, Body=csv_data.encode("utf-8"))
 
@@ -79,3 +79,8 @@ def procesar_archivos_existentes():
 if __name__ == "__main__":
     resultado = procesar_archivos_existentes()
     print(resultado)
+    
+def lambda_handler(event, context):
+    resultado = procesar_archivos_existentes()
+    return resultado
+
