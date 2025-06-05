@@ -9,5 +9,11 @@
     "manage_roles": false,
     "role_name": "LabRole",
     "apigateway_enabled": false
+    "events": [
+      {
+        "function": "app3.lambda_handler",
+        "expression": "rate(1 day)"
+      }
+    ]
   }
 }

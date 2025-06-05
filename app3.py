@@ -4,7 +4,7 @@ import boto3
 glue = boto3.client('glue')
 
 # Nombre del crawler (ajústalo si es diferente)
-CRAWLER_NAME = 'crawler-noticias-headlines'
+CRAWLER_NAME = 'noticias_zappa'
 
 def lambda_handler(event, context):
     try:
